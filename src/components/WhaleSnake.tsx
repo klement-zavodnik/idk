@@ -20,6 +20,7 @@ export default function WhaleSnake({ onComplete }: { onComplete: () => void }) {
   const [snake, setSnake] = useState<Point[]>(INITIAL_SNAKE);
   const [direction, setDirection] = useState<Point>(INITIAL_DIRECTION);
   const [food, setFood] = useState<Point>({ x: 5, y: 5 });
+  const [pizza, setPizza] = useState<Point | null>(null);
   const [gameOver, setGameOver] = useState(false);
   const [score, setScore] = useState(0);
   const [isPaused, setIsPaused] = useState(true);
@@ -46,6 +47,7 @@ export default function WhaleSnake({ onComplete }: { onComplete: () => void }) {
     setSnake(INITIAL_SNAKE);
     setDirection(INITIAL_DIRECTION);
     setFood(generateFood(INITIAL_SNAKE));
+    setPizza(null);
     setGameOver(false);
     setScore(0);
     setGrowthPending(0);
@@ -55,48 +57,65 @@ export default function WhaleSnake({ onComplete }: { onComplete: () => void }) {
   const moveSnake = useCallback(() => {
     if (gameOver || isPaused) return;
 
-    setSnake((prevSnake) => {
-      const head = prevSnake[0];
-      const newHead = {
-        x: head.x + direction.x,
-        y: head.y + direction.y,
-      };
+    const head = snake[0];
+    const newHead = {
+      x: head.x + direction.x,
+      y: head.y + direction.y,
+    };
 
-      // Check wall collision
-      if (
-        newHead.x < 0 ||
-        newHead.x >= GRID_SIZE ||
-        newHead.y < 0 ||
-        newHead.y >= GRID_SIZE
-      ) {
-        setGameOver(true);
-        return prevSnake;
-      }
+    // Check wall collision
+    if (
+      newHead.x < 0 ||
+      newHead.x >= GRID_SIZE ||
+      newHead.y < 0 ||
+      newHead.y >= GRID_SIZE
+    ) {
+      setGameOver(true);
+      return;
+    }
 
-      // Check self collision
-      if (prevSnake.some((segment) => segment.x === newHead.x && segment.y === newHead.y)) {
-        setGameOver(true);
-        return prevSnake;
-      }
+    // Check self collision
+    if (snake.some((segment) => segment.x === newHead.x && segment.y === newHead.y)) {
+      setGameOver(true);
+      return;
+    }
 
-      const newSnake = [newHead, ...prevSnake];
+    const newSnake = [newHead, ...snake];
 
-      // Check food collision
-      if (newHead.x === food.x && newHead.y === food.y) {
-        setScore((s) => s + 1);
-        setGrowthPending((prev) => prev + 2); // Grow by 3 total (1 from not popping + 2 pending)
-        setFood(generateFood(newSnake));
+    let ateSomething = false;
+
+    // Check food collision
+    if (newHead.x === food.x && newHead.y === food.y) {
+      setScore((s) => s + 1);
+      setGrowthPending((prev) => prev + 1);
+      setFood(generateFood(newSnake));
+      ateSomething = true;
+    } 
+    // Check pizza collision
+    else if (pizza && newHead.x === pizza.x && newHead.y === pizza.y) {
+      setScore((s) => s + 2);
+      setGrowthPending((prev) => prev + 2);
+      setPizza(null);
+      ateSomething = true;
+    }
+
+    if (!ateSomething) {
+      if (growthPending > 0) {
+        setGrowthPending((prev) => prev - 1);
       } else {
-        if (growthPending > 0) {
-          setGrowthPending((prev) => prev - 1);
-        } else {
-          newSnake.pop();
-        }
+        newSnake.pop();
       }
+    }
 
-      return newSnake;
-    });
-  }, [direction, food, gameOver, isPaused, generateFood, growthPending]);
+    // Randomly spawn/despawn pizza
+    if (!pizza && Math.random() < 0.02) { // 2% chance per tick
+      setPizza(generateFood(newSnake));
+    } else if (pizza && Math.random() < 0.015) { // 1.5% chance to disappear (approx 10 seconds)
+      setPizza(null);
+    }
+
+    setSnake(newSnake);
+  }, [snake, direction, food, pizza, gameOver, isPaused, generateFood, growthPending]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -123,20 +142,27 @@ export default function WhaleSnake({ onComplete }: { onComplete: () => void }) {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [direction]);
 
+  const moveSnakeRef = useRef(moveSnake);
+  useEffect(() => {
+    moveSnakeRef.current = moveSnake;
+  }, [moveSnake]);
+
   useEffect(() => {
     if (!isPaused && !gameOver) {
-      gameLoopRef.current = setInterval(moveSnake, SPEED);
+      gameLoopRef.current = setInterval(() => {
+        moveSnakeRef.current();
+      }, SPEED);
     } else {
       if (gameLoopRef.current) clearInterval(gameLoopRef.current);
     }
     return () => {
       if (gameLoopRef.current) clearInterval(gameLoopRef.current);
     };
-  }, [isPaused, gameOver, moveSnake]);
+  }, [isPaused, gameOver]);
 
   useEffect(() => {
     if (score > highScore) setHighScore(score);
-    if (score >= 30) { // Win condition for Level 1
+    if (score >= 25) { // Win condition for Level 1
       setIsPaused(true);
     }
   }, [score, highScore]);
@@ -170,7 +196,7 @@ export default function WhaleSnake({ onComplete }: { onComplete: () => void }) {
       <motion.div 
         initial={{ opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}
-        className="bg-white/10 backdrop-blur-md p-8 rounded-[2.5rem] shadow-2xl border-4 border-white/20 max-w-md w-full relative z-10"
+        className="bg-white/10 backdrop-blur-md p-8 rounded-[2.5rem] shadow-2xl border-4 border-white/20 max-w-3xl w-full relative z-10"
       >
         <div className="flex justify-between items-center mb-6">
           <div className="text-white font-bold text-xl flex items-center gap-2 drop-shadow-sm">
@@ -195,27 +221,54 @@ export default function WhaleSnake({ onComplete }: { onComplete: () => void }) {
           {/* Light rays effect */}
           <div className="absolute inset-0 opacity-20 pointer-events-none bg-[linear-gradient(115deg,transparent_40%,rgba(255,255,255,0.1)_45%,rgba(255,255,255,0.1)_55%,transparent_60%)] bg-[length:200%_100%] animate-[shimmer_8s_infinite_linear]" />
 
-          {/* Food (Chicks) */}
-          <motion.div 
-            animate={{ 
-              y: [0, -4, 0],
-              rotate: [0, -5, 5, 0]
-            }}
-            transition={{ 
-              duration: 2, 
-              repeat: Infinity,
-              ease: "easeInOut"
-            }}
-            className="absolute text-2xl flex items-center justify-center z-10"
-            style={{
-              left: `${(food.x / GRID_SIZE) * 100}%`,
-              top: `${(food.y / GRID_SIZE) * 100}%`,
-              width: `${100 / GRID_SIZE}%`,
-              height: `${100 / GRID_SIZE}%`,
-            }}
-          >
-            🐥
-          </motion.div>
+            {/* Food (Chicks) */}
+            <motion.div 
+              animate={{ 
+                y: [0, -4, 0],
+                rotate: [0, -5, 5, 0]
+              }}
+              transition={{ 
+                duration: 2, 
+                repeat: Infinity,
+                ease: "easeInOut"
+              }}
+              className="absolute text-2xl flex items-center justify-center z-10"
+              style={{
+                left: `${(food.x / GRID_SIZE) * 100}%`,
+                top: `${(food.y / GRID_SIZE) * 100}%`,
+                width: `${100 / GRID_SIZE}%`,
+                height: `${100 / GRID_SIZE}%`,
+              }}
+            >
+              🐥
+            </motion.div>
+
+            {/* Pizza (Special Food) */}
+            {pizza && (
+              <motion.div 
+                initial={{ scale: 0, rotate: -180 }}
+                animate={{ 
+                  scale: [1, 1.2, 1],
+                  rotate: 0,
+                  filter: ["drop-shadow(0 0 0px #fff)", "drop-shadow(0 0 10px #fbbf24)", "drop-shadow(0 0 0px #fff)"]
+                }}
+                exit={{ scale: 0 }}
+                transition={{ 
+                  duration: 1, 
+                  repeat: Infinity,
+                  ease: "easeInOut"
+                }}
+                className="absolute text-2xl flex items-center justify-center z-10"
+                style={{
+                  left: `${(pizza.x / GRID_SIZE) * 100}%`,
+                  top: `${(pizza.y / GRID_SIZE) * 100}%`,
+                  width: `${100 / GRID_SIZE}%`,
+                  height: `${100 / GRID_SIZE}%`,
+                }}
+              >
+                🍕
+              </motion.div>
+            )}
 
           {/* Snake (Whale & Waves) */}
           {snake.map((segment, i) => {
@@ -296,7 +349,7 @@ export default function WhaleSnake({ onComplete }: { onComplete: () => void }) {
                         Restart
                       </button>
                     </>
-                  ) : score >= 30 ? (
+                  ) : score >= 25 ? (
                     <>
                       <h3 className="text-2xl font-bold text-sky-600 mb-4">Level 1 Clear!</h3>
                       <p className="text-sky-800 mb-6">The whale is full and happy!</p>
@@ -328,7 +381,7 @@ export default function WhaleSnake({ onComplete }: { onComplete: () => void }) {
         </div>
 
         <div className="mt-6 text-center text-sky-400 text-sm font-medium">
-          Eat 30 chicks to advance!
+          Eat 25 chicks to advance! Eat pizza to get bonus points!
         </div>
       </motion.div>
     </div>

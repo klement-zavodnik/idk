@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Trophy, RotateCcw, Play, ChevronRight, Skull } from 'lucide-react';
 
 const GRID_SIZE = 15;
-const CELL_SIZE = 30;
+const CELL_SIZE = 45;
 
 // 0: Path, 1: Wall, 2: Dot
 const INITIAL_MAZE = [
@@ -34,6 +34,21 @@ interface Ghost {
   dir: Point;
   color: string;
 }
+
+interface MazeCellProps {
+  type: number;
+}
+
+const MazeCell = React.memo(({ type }: MazeCellProps) => {
+  return (
+    <div className="relative flex items-center justify-center w-full h-full">
+      {type === 1 && <div className="w-full h-full bg-blue-800/50 border border-blue-400/20 rounded-sm" />}
+      {type === 2 && <div className="w-1.5 h-1.5 bg-yellow-200 rounded-full shadow-[0_0_5px_rgba(254,240,138,0.8)]" />}
+    </div>
+  );
+});
+
+MazeCell.displayName = 'MazeCell';
 
 export default function WhalePacman({ onComplete }: { onComplete: () => void }) {
   const [maze, setMaze] = useState(INITIAL_MAZE.map(row => [...row]));
@@ -75,54 +90,56 @@ export default function WhalePacman({ onComplete }: { onComplete: () => void }) 
   const movePlayer = useCallback(() => {
     if (gameOver || isPaused) return;
 
-    setPlayerPos(prev => {
-      // Try to change to nextDir if possible
-      let currentDir = direction;
-      if (nextDir.x !== 0 || nextDir.y !== 0) {
-        const nx = prev.x + nextDir.x;
-        const ny = prev.y + nextDir.y;
-        if (maze[ny]?.[nx] !== 1) {
-          currentDir = nextDir;
-          setDirection(nextDir);
-          setNextDir({ x: 0, y: 0 });
-        }
+    const prevPos = playerPos;
+    let currentDir = direction;
+    
+    // Try to change to nextDir if possible
+    if (nextDir.x !== 0 || nextDir.y !== 0) {
+      const nx = prevPos.x + nextDir.x;
+      const ny = prevPos.y + nextDir.y;
+      if (maze[ny]?.[nx] !== 1) {
+        currentDir = nextDir;
+        setDirection(nextDir);
+        setNextDir({ x: 0, y: 0 });
       }
+    }
 
-      const nx = prev.x + currentDir.x;
-      const ny = prev.y + currentDir.y;
+    const nx = prevPos.x + currentDir.x;
+    const ny = prevPos.y + currentDir.y;
 
-      if (maze[ny]?.[nx] === 1) return prev; // Hit wall
+    if (maze[ny]?.[nx] !== 1) {
+      // Valid move
+      setPlayerPos({ x: nx, y: ny });
 
       // Eat dot
       if (maze[ny]?.[nx] === 2) {
-        const newMaze = [...maze];
-        newMaze[ny][nx] = 0;
-        setMaze(newMaze);
+        setMaze(prevMaze => {
+          const newMaze = prevMaze.map(row => [...row]);
+          newMaze[ny][nx] = 0;
+          return newMaze;
+        });
         setScore(s => s + 1);
       }
-
-      return { x: nx, y: ny };
-    });
+    }
 
     // Move Ghosts
     setGhosts(prevGhosts => prevGhosts.map(ghost => {
       let { x, y } = ghost.pos;
       let { x: dx, y: dy } = ghost.dir;
 
-      // Simple AI: try to keep moving, if wall, pick random direction
-      const nx = x + dx;
-      const ny = y + dy;
+      const gnx = x + dx;
+      const gny = y + dy;
 
-      if (maze[ny]?.[nx] === 1 || Math.random() < 0.1) {
+      if (maze[gny]?.[gnx] === 1 || Math.random() < 0.1) {
         const dirs = [{ x: 1, y: 0 }, { x: -1, y: 0 }, { x: 0, y: 1 }, { x: 0, y: -1 }];
         const validDirs = dirs.filter(d => maze[y + d.y]?.[x + d.x] !== 1);
         const newDir = validDirs[Math.floor(Math.random() * validDirs.length)] || ghost.dir;
         return { ...ghost, dir: newDir, pos: { x: x + newDir.x, y: y + newDir.y } };
       }
 
-      return { ...ghost, pos: { x: nx, y: ny } };
+      return { ...ghost, pos: { x: gnx, y: gny } };
     }));
-  }, [direction, nextDir, maze, gameOver, isPaused]);
+  }, [direction, nextDir, maze, gameOver, isPaused, playerPos]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -138,14 +155,21 @@ export default function WhalePacman({ onComplete }: { onComplete: () => void }) 
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
+  const movePlayerRef = useRef(movePlayer);
+  useEffect(() => {
+    movePlayerRef.current = movePlayer;
+  }, [movePlayer]);
+
   useEffect(() => {
     if (!isPaused && !gameOver) {
-      gameLoopRef.current = setInterval(movePlayer, 200);
+      gameLoopRef.current = setInterval(() => {
+        movePlayerRef.current();
+      }, 200);
     } else {
       if (gameLoopRef.current) clearInterval(gameLoopRef.current);
     }
     return () => { if (gameLoopRef.current) clearInterval(gameLoopRef.current); };
-  }, [isPaused, gameOver, movePlayer]);
+  }, [isPaused, gameOver]);
 
   // Collision detection
   useEffect(() => {
@@ -155,6 +179,14 @@ export default function WhalePacman({ onComplete }: { onComplete: () => void }) 
   }, [ghosts, playerPos]);
 
   const isWin = score >= totalDots && totalDots > 0;
+
+  const mazeDisplay = React.useMemo(() => {
+    return maze.map((row, y) => row.map((cell, x) => (
+      <div key={`${x}-${y}`} style={{ gridColumn: x + 1, gridRow: y + 1 }}>
+        <MazeCell type={cell} />
+      </div>
+    )));
+  }, [maze]);
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-b from-blue-900 via-indigo-900 to-black p-4 font-sans relative overflow-hidden">
@@ -182,40 +214,35 @@ export default function WhalePacman({ onComplete }: { onComplete: () => void }) 
             gridTemplateRows: `repeat(${GRID_SIZE}, ${CELL_SIZE}px)`,
           }}
         >
-          {maze.map((row, y) => row.map((cell, x) => (
-            <div key={`${x}-${y}`} className="relative flex items-center justify-center">
-              {cell === 1 && <div className="w-full h-full bg-blue-800/50 border border-blue-400/20 rounded-sm" />}
-              {cell === 2 && <div className="w-1.5 h-1.5 bg-yellow-200 rounded-full shadow-[0_0_5px_rgba(254,240,138,0.8)]" />}
-            </div>
-          )))}
+          {mazeDisplay}
 
           {/* Player */}
-          <motion.div 
-            animate={{ 
-              x: playerPos.x * CELL_SIZE, 
-              y: playerPos.y * CELL_SIZE,
-              scaleX: direction.x === 1 ? -1 : 1,
-              rotate: direction.y === -1 ? 90 : direction.y === 1 ? -90 : 0
-            }}
-            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-            className="absolute text-2xl z-20 flex items-center justify-center"
-            style={{ width: CELL_SIZE, height: CELL_SIZE }}
-          >
-            🐋
-          </motion.div>
-
-          {/* Ghosts */}
-          {ghosts.map((ghost, i) => (
-            <motion.div
-              key={i}
-              animate={{ x: ghost.pos.x * CELL_SIZE, y: ghost.pos.y * CELL_SIZE }}
-              transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-              className="absolute text-2xl z-10 flex items-center justify-center"
+            <motion.div 
+              animate={{ 
+                x: playerPos.x * CELL_SIZE, 
+                y: playerPos.y * CELL_SIZE,
+                scaleX: direction.x === 1 ? -1 : 1,
+                rotate: direction.y === -1 ? 90 : direction.y === 1 ? -90 : 0
+              }}
+              transition={{ duration: 0.15, ease: "linear" }}
+              className="absolute text-2xl z-20 flex items-center justify-center"
               style={{ width: CELL_SIZE, height: CELL_SIZE }}
             >
-              🦈
+              🐋
             </motion.div>
-          ))}
+
+            {/* Ghosts */}
+            {ghosts.map((ghost, i) => (
+              <motion.div
+                key={i}
+                animate={{ x: ghost.pos.x * CELL_SIZE, y: ghost.pos.y * CELL_SIZE }}
+                transition={{ duration: 0.15, ease: "linear" }}
+                className="absolute text-2xl z-10 flex items-center justify-center"
+                style={{ width: CELL_SIZE, height: CELL_SIZE }}
+              >
+                🦈
+              </motion.div>
+            ))}
 
           <AnimatePresence>
             {(isPaused || gameOver || isWin) && (

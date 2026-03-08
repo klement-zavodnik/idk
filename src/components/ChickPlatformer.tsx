@@ -2,11 +2,11 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Trophy, RotateCcw, Play, ChevronRight, Heart } from 'lucide-react';
 
-const CANVAS_WIDTH = 800;
-const CANVAS_HEIGHT = 400;
+const CANVAS_WIDTH = 1000;
+const CANVAS_HEIGHT = 500;
 const GRAVITY = 0.6;
-const JUMP_FORCE = -12;
-const PLAYER_SPEED = 4;
+const JUMP_FORCE = -14;
+const PLAYER_SPEED = 5;
 
 interface Entity {
   x: number;
@@ -22,31 +22,31 @@ interface Entity {
 }
 
 const INITIAL_ENEMIES: Entity[] = [
-  { x: 300, y: 348, width: 32, height: 32, type: 'enemy', emoji: '🐍', vx: 1.2, vy: 0 },
-  { x: 550, y: 268, width: 32, height: 32, type: 'enemy', emoji: '🕷️', vx: -1.5, vy: 0 },
-  { x: 950, y: 188, width: 32, height: 32, type: 'enemy', emoji: '🐍', vx: 1.2, vy: 0 },
-  { x: 1350, y: 168, width: 32, height: 32, type: 'enemy', emoji: '🕷️', vx: -1.2, vy: 0 },
-  { x: 1800, y: 218, width: 32, height: 32, type: 'enemy', emoji: '🐍', vx: 0.8, vy: 0 },
-  { x: 2100, y: 188, width: 32, height: 32, type: 'enemy', emoji: '🕷️', vx: -1, vy: 0 },
-  { x: 2400, y: 268, width: 32, height: 32, type: 'enemy', emoji: '🐍', vx: 1.5, vy: 0 },
-  { x: 2650, y: 188, width: 32, height: 32, type: 'enemy', emoji: '🕷️', vx: -1.2, vy: 0 },
+  { x: 300, y: 448, width: 32, height: 32, type: 'enemy', emoji: '🐍', vx: 1.2, vy: 0 },
+  { x: 550, y: 368, width: 32, height: 32, type: 'enemy', emoji: '🕷️', vx: -1.5, vy: 0 },
+  { x: 950, y: 288, width: 32, height: 32, type: 'enemy', emoji: '🐍', vx: 1.2, vy: 0 },
+  { x: 1350, y: 268, width: 32, height: 32, type: 'enemy', emoji: '🕷️', vx: -1.2, vy: 0 },
+  { x: 1800, y: 318, width: 32, height: 32, type: 'enemy', emoji: '🐍', vx: 0.8, vy: 0 },
+  { x: 2100, y: 288, width: 32, height: 32, type: 'enemy', emoji: '🕷️', vx: -1, vy: 0 },
+  { x: 2400, y: 368, width: 32, height: 32, type: 'enemy', emoji: '🐍', vx: 1.5, vy: 0 },
+  { x: 2650, y: 288, width: 32, height: 32, type: 'enemy', emoji: '🕷️', vx: -1.2, vy: 0 },
 ];
 
 const INITIAL_PLATFORMS: Entity[] = [
-  { x: 0, y: 380, width: 400, height: 20, type: 'platform' }, // Starting ground
-  { x: 480, y: 300, width: 200, height: 40, type: 'platform' },
-  { x: 560, y: 180, width: 40, height: 40, type: 'platform', isSpecial: true }, // Mystery 1
-  { x: 760, y: 220, width: 200, height: 40, type: 'platform' },
-  { x: 1040, y: 300, width: 200, height: 40, type: 'platform' },
-  { x: 1120, y: 180, width: 40, height: 40, type: 'platform', isSpecial: true }, // Mystery 2
-  { x: 1320, y: 200, width: 200, height: 40, type: 'platform' }, // Lowered from 180 to 200, closer
-  { x: 1600, y: 250, width: 200, height: 40, type: 'platform' },
-  { x: 1680, y: 130, width: 40, height: 40, type: 'platform', isSpecial: true }, // Mystery 3
-  { x: 1880, y: 160, width: 200, height: 40, type: 'platform' },
-  { x: 2160, y: 300, width: 300, height: 40, type: 'platform' },
-  { x: 2290, y: 180, width: 40, height: 40, type: 'platform', isSpecial: true }, // Mystery 4
-  { x: 2540, y: 220, width: 200, height: 40, type: 'platform' },
-  { x: 2820, y: 140, width: 400, height: 260, type: 'platform' }, // Tower base
+  { x: 0, y: 480, width: 400, height: 20, type: 'platform' }, // Starting ground
+  { x: 480, y: 400, width: 200, height: 40, type: 'platform' },
+  { x: 560, y: 280, width: 40, height: 40, type: 'platform', isSpecial: true }, // Mystery 1
+  { x: 760, y: 320, width: 200, height: 40, type: 'platform' },
+  { x: 1040, y: 400, width: 200, height: 40, type: 'platform' },
+  { x: 1120, y: 280, width: 40, height: 40, type: 'platform', isSpecial: true }, // Mystery 2
+  { x: 1320, y: 300, width: 200, height: 40, type: 'platform' }, 
+  { x: 1600, y: 350, width: 200, height: 40, type: 'platform' },
+  { x: 1680, y: 230, width: 40, height: 40, type: 'platform', isSpecial: true }, // Mystery 3
+  { x: 1880, y: 260, width: 200, height: 40, type: 'platform' },
+  { x: 2160, y: 400, width: 300, height: 40, type: 'platform' },
+  { x: 2290, y: 280, width: 40, height: 40, type: 'platform', isSpecial: true }, // Mystery 4
+  { x: 2540, y: 320, width: 200, height: 40, type: 'platform' },
+  { x: 2820, y: 240, width: 400, height: 260, type: 'platform' }, // Tower base
 ];
 
 export default function ChickPlatformer({ onComplete }: { onComplete: () => void }) {
@@ -56,11 +56,11 @@ export default function ChickPlatformer({ onComplete }: { onComplete: () => void
   const [showWinModal, setShowWinModal] = useState(false);
   const [score, setScore] = useState(0);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const requestRef = useRef<number>(null);
+  const requestRef = useRef<number | null>(null);
 
   const playerRef = useRef<Entity>({
     x: 50,
-    y: 300,
+    y: 400,
     width: 32,
     height: 32,
     type: 'player',
@@ -74,7 +74,7 @@ export default function ChickPlatformer({ onComplete }: { onComplete: () => void
   const platformsRef = useRef<Entity[]>(INITIAL_PLATFORMS.map(p => ({ ...p })));
   const eggsRef = useRef<Entity[]>([]);
   const chickensRef = useRef<Entity[]>([]);
-  const goal = useRef<Entity>({ x: 2970, y: 100, width: 64, height: 64, type: 'goal', emoji: '🐋' });
+  const goal = useRef<Entity>({ x: 2970, y: 200, width: 64, height: 64, type: 'goal', emoji: '🐋' });
 
   const keysRef = useRef<{ [key: string]: boolean }>({});
   const cameraXRef = useRef(0);
@@ -521,7 +521,7 @@ export default function ChickPlatformer({ onComplete }: { onComplete: () => void
   }, [win]);
 
   const resetGame = () => {
-    playerRef.current = { x: 50, y: 300, width: 32, height: 32, type: 'player', vx: 0, vy: 0, emoji: '🐥' };
+    playerRef.current = { x: 50, y: 400, width: 32, height: 32, type: 'player', vx: 0, vy: 0, emoji: '🐥' };
     enemiesRef.current = INITIAL_ENEMIES.map(e => ({ ...e }));
     platformsRef.current = INITIAL_PLATFORMS.map(p => ({ ...p }));
     eggsRef.current = [];
